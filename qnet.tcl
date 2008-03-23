@@ -1,3 +1,5 @@
+package require Tcl 8.3
+
 # This is a fairly sophisticated (compared to others) "qauth" script. It keeps your 
 # eggdrop authed to Q on Quakenet, retrieves the bots auth' chanlevs from Q & L and requests
 # op/invite/unban himself. Ideally, the only thing you'll need to do is set Username + Password
@@ -5,7 +7,10 @@
 #   Quakenet.
 # Copyleft Bernhard 'elven' Stoeckner <elven@swordcoast.net>
 
-
+# Note that this script requires tcllib to be installed in order for challenge authentication to work.
+# On debian-like systems, just do apt-get install tcllib
+package require sha1 2.0.0
+# If this line throws an error for you, and you are NOT using challenge authentication, just comment it out.
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -20,10 +25,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-
-# $Id: qnet.tcl 7 2007-06-06 14:20:29Z elven $
-# HEAD at $HeadURL: svn://swordcoast.net/tcl/trunk/qnet/qnet.tcl $
-
 
 #      ´QQLQQLQQLQ`              @"_____
 #     QQLQQ    QQQQQ
@@ -348,50 +349,59 @@ proc qnet:notc {n u h t {d ""}} {
 	if {[string trim $t]==""} { return }
 	global qnet qflag lflag qnet_dl qnet_dq ident
 	if {$u == "TheQBot@CServe.quakenet.org"} {
-		if {[string trim $t] == "AUTH'd successfully." || [string trim  $t] == "CHALLENGEAUTH'd successfully."} {
+		if {[regexp {^You are now logged in as (.+)\.$} $t {} auth]} {
 			set qnet(authed) 1
+			set qnet(authname) $auth
 			putlog "Got authentication response, we are authed \\o/`."
 			if {$qnet(usedynamic) > 0} {
 				qnet:update
 			}
 		}
 		
-		if {[string trim $t] == "If you are known by Q type:  \"/msg Q@CServe.quakenet.org AUTH nickname password\""} {
+		if {[regexp {is only available to authed users} $t]} {
 			set qnet(authed) 0
 		}
-		if {[string trim $t] == "Username or password incorrect, or you are already authed."} {
+
+		if {[string trim $t] == "Username or password incorrect."} {
 			putlog "Either you tried to auth again, or your USERNAME/PASSWORD IS INCORRECT!"
 		}
 		
-		if {[regexp {^You have authed as userid: (\d+) nick: (\S+)$} $t xx x0 x1]} {
+		if {[regexp {^User ID\s+:\s(\d+)$} $t {} x0]} {
 			set qnet(userid) $x0
-			set qnet(authname) $x1
 		}
 		
 		if {[regexp {^You have NOT authed$} $t]} {
 			qnet:auth
 		}
 		
-		if {[regexp {^E-mail: (.+)$} $t xx x0]} {
+		if {[regexp {^Email address\s*:\s*(.+)$} $t {} x0]} {
 			set qnet(email) $x0
 		}
 		
-		if {[regexp {^Access level \+(\S+) on channel (#\S+)$} $t xx x0 x1]} {
+		if {[regexp {^ (#\S+)\s+ \+(\S+)$} $t {} x1 x0]} {
 			if {!$qnet(usedynamic)} { return }
 			set x1 [string tolower $x1]
 			set qflag($x1) $x0
 		}
 		
 		# CHALLENGE support
-		if {[regexp {^CHALLENGE MD5 ([0-9a-z]+)$} $t {} hash]} {
+		if {[regexp {^CHALLENGE ([a-f0-9]+) (.+)$} $t {} hash hmacs]} {
+			if {![regexp {HMAC-SHA-1} $hmacs]} {
+				putlog "Warning: Chosen hash algorithm is not supported by Q."
+				return
+			}
 			if {$qnet(authmethod) == 0} {
 				set auth [list $qnet(user) $qnet(pass)]
 			} {
 				set auth [qnet:retrauth $ident]
 			}
 			if {$auth == 0} { putlog "Could not retrieve auth information, aborting auth." ; return }
-			set dig [md5 "[string range [lindex $auth 1] 0 9] $hash"]
-			putserv "PRIVMSG $qnet(qservice) :CHALLENGEAUTH [lindex $auth 0] $dig"
+			set user [string tolower [string map -nocase {"[" "{" "]" "}"} [lindex $auth 0]]] ;# This could use some love.
+			set pass [string range [lindex $auth 1] 0 9]
+			set pass [::sha1::sha1 -hex $pass]
+			set resp [::sha1::sha1 -hex "${user}:${pass}"]
+			set resp [::sha1::hmac -hex -key $resp $hash]
+			putquick "PRIVMSG $qnet(qservice) :CHALLENGEAUTH $user $resp HMAC-SHA-1" -next
 		}
 
 		if {[string trim $t] == "You are already authed." && $qnet(authed) == 0} {
@@ -676,7 +686,7 @@ proc qnet:dcc {h i t} {
 					return 1
 				}
 				putidx $i " I am authed as $qnet(authname) with userid $qnet(userid)."
-				putidx $i "  The email set is: $qnet(email). Note that Quakenet removed support for AuthID echoing."
+				putidx $i "  The email set is: $qnet(email)."
 				if {$qnet(usedynamic)} { putidx $i " I am using dynamic flag retrieval." } { putidx $i " I am not using dynamic flag retrieval." }
 				putidx $i "  My last auth was [duration [expr [unixtime]-$qnet(lastauth)]] ago."
 				putidx $i "  Channel listing:"
@@ -729,8 +739,7 @@ proc qnet:dcc {h i t} {
 		}
 		"about" {
 			putidx $i "Quakenet Auth: v${qnet(version)}"
-			putidx $i "\$HeadURL: svn://swordcoast.net/tcl/trunk/qnet/qnet.tcl $"
-			putidx $i "\$Id: qnet.tcl 7 2007-06-06 14:20:29Z elven $"
+			putidx $i " Go to http://git.swordcoast.net/?p=irc/eggdrop/quakenet.git;a=summary for instructions & updates."
 			return 1
 		}
 		default {
