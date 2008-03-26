@@ -194,6 +194,7 @@ proc qnet:raw396 {f k t} {
 
 proc qnet:timechk {min hr day mon yr} {
 	foreach chan [channels] {
+		if {![botonchan $chan]} { continue }
 		if {[botisop $chan] || [botisvoice $chan]} { continue } ;#we have op or voice already
 		qnet:need $chan "voice"
 	}
@@ -423,12 +424,10 @@ proc qnet:need {c t} {
 	switch -exact -- $t {
 		"op" {
 			if {[channel get $c noserviceop]} { return }
-			if {![botonchan $c]} { return }
 			if {$isop && !$isaop} { qnet:putmsg $c "op" }
 		}
 		"voice" {
 			if {[channel get $c noservicevoice]} { return }
-			if {![botonchan $c]} { return }
 			if {$isvc && !$isavc} { qnet:putmsg $c "voice" }
 		}
 		
@@ -482,13 +481,8 @@ proc qnet:need {c t} {
 
 
 
-
-
-
-
 ######################
 # interface stuff
-
 
 proc qnet:dcc {h i t} {
 	set lst [split $t]
