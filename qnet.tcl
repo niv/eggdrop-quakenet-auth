@@ -47,44 +47,6 @@ package require sha1 2.0.0
 #  -- thank you
 
 
-####
-# Quickstart:
-# 1) Put this script (qnet.tcl) in the scripts/ directory.
-# 2) Update your eggdrop.conf: Append the following (indented lines) AT THE BOTTOM:
-#    set qnet(user) "here_hoes_authname"
-#    set qnet(pass) "here_goes_password"
-#    set qnet(usex) 0   ;# Set to 1 to make the bot set +x on authentication
-#    source scripts/qnet.tcl
-# 3) rehash/restart the bot (you may need to do .qnet auth if you're rehashing)
-#
-# That should get you started just nicely. If you're having trouble, do not hesitate
-# to mail me at the address given above.
-
-####
-# Caveats/FAQ:
-
-# Q My bot always keeps messing about with Q and L and moaning
-#   about ops/deops.
-# A Make sure Q & L are added as global friends & global ops!
-#   Its not necessary, but recommended to avoid clashes in general.
-
-# Q I am connecting through a bouncer, and eggdrop keeps trying
-#   to authenticate all the time, even though the server connection
-#   is already authenticated to Q.
-# A This is a known issue. There is no workaround available, except
-#   setting qnet(authed) to 1, and running qnet:update manually every
-#   time eggdrop connects.
-
-####
-# Run-time settings, channel flags:
-
-# * +noserviceprotect (default: -)
-#   Stops eggdrop from protecting its channels through Q/L (recover et al)     
-# * +noserviceop (default: -)
-#   Stops Q/L from requesting op through the services.
-# * +noservicevoice (default: -)
-#   Stops Q/L from requesting voice through the services.
-
 
 #################
 # settings below
