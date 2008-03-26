@@ -117,7 +117,7 @@ set qnet(chktmr) 600
 ###########################
 #code below - read: you do
 # not need to edit further
-set qnet(version) "2.4"
+set qnet(version) "2.5"
 
 if {$qnet(authmethod) == 1} {
 	if {![info exists ident] || [array exists ident] || $ident == "" } {
