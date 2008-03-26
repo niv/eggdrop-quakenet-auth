@@ -130,7 +130,7 @@ if {![info exists qnet(authmethod)]} { set qnet(authmethod) 0 }
 	#      on the same host, it may be convenient
 	#      to use 1 - else use 0!
 
-if {![info exists qnet(authfile)]} { set qnet(authfile) "/home/eggheads/.auth" }
+if {![info exists qnet(authfile)]} { set qnet(authfile) "[set env(HOME)]/.auth" }
 	# This is very useful if you run multiple bots from the same directory
 	# with different config files. This way, you dont need to set $qnet(user) etc
 	# in each file, just edit your .auth (or eqiv) file. And its neat to
