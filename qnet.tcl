@@ -67,7 +67,6 @@ set qnet(usedynamic) 2
 	# dont worry about this if you are using 2 here
 	
 set qnet(qservice) "Q@cserve.quakenet.org"
-set qnet(lservice) "L@lightweight.quakenet.org"
 set qnet(oservice) "O"
 	#no change needed on quakenet
 
@@ -141,9 +140,6 @@ setudef flag noserviceprotect
 setudef flag noserviceop
 setudef flag noservicevoice
 
-catch { unset lflag(-none) } ;#that was a stupid idea, never mind it
-catch { unset qflag(-none) }
-
 bind evnt   "-" "init-server"       qnet:init
 bind evnt   "-" "rehash"            qnet:init
 bind evnt   "-" "disconnect-server" qnet:init
@@ -164,7 +160,6 @@ if {![info exists qnet(lastauth)]} { set qnet(lastauth) 0 }
 if {![info exists qnet(lastupdate)]} { set qnet(lastupdate) 0 }
 if {![info exists qnet(authed)]} { set qnet(authed) 0 }
 if {![info exists qnet(email)]} { set qnet(email) 0 }
-if {![info exists qnet(Llisting)]} { set qnet(Llisting) 0 }
 if {![info exists qnet(netsplit)]} { set qnet(netsplit) 0 }
 if {![info exists qnet(cloaked)]} { set qnet(cloaked) 0 }
 
@@ -187,7 +182,7 @@ utimer $qnet(chktmr) "qnet:chktimer"
 #}
 
 proc qnet:flood {n u h t c} {
-	if {$n == "Q" || $n == "L"} { return 1 }
+	if {$n == "Q" || $n == "O"} { return 1 }
 	return 0
 }
 
@@ -299,10 +294,8 @@ proc qnet:retrauth {u} {
 proc qnet:update {} {
 	global qnet
 	if {!$qnet(authed)} { return 0 }
-	catch { unset ::lflag }
 	catch { unset ::qflag }
 	putquick "PRIVMSG Q :whoami"
-	putquick "PRIVMSG L :whoami"
 	return 1
 }
 
@@ -370,51 +363,7 @@ proc qnet:notc {n u h t {d ""}} {
 			set qnet(authed) 1
 			if {$qnet(usedynamic) > 0} { qnet:update }
 		}
-		
-		return
 	}
-	
-	if {$u == "TheLBot@lightweight.quakenet.org"} {
-		if {[string trim $t] == "You are not authed.  Please auth with Q before sending me commands."} {
-			set qnet(authed) 0
-			qnet:auth
-		}
-		if {[regexp {^Sorry, you need the \+o flag on (\S+) to get ops\.$} $t xx x0]} {
-			#we dont have op there
-			set x0 [string tolower $x0]
-			putlog "Error in config: We don't have op-flag on $x0, even if our config says so. Unsetting."
-			unset lflag($x0)
-		}
-		if {[regexp {^Sorry, you need the \+v flag on (\S+) to use voice\.$} $t xx x0]} {
-			set x0 [string tolower $x0]
-			putlog "Error in config: We don't have voice-flag on $x0, even if our config says so. Unsetting."
-			unset lflag($x0)
-		}
-		
-		if {[regexp {^You are authed as (\S+)$} $t]} {
-			if {!$qnet(usedynamic)} { return }
-			set qnet(Llisting) 1
-		}
-		if {[regexp {^End of list\.$} $t]} {
-			if {!$qnet(usedynamic)} { return }
-			set qnet(Llisting) 0
-		}
-		if {[regexp {^([^ ]+) is not known on any channels\.$} $t crap ani]} {
-			if {$ani != $qnet(authname)} { return }
-			if {!$qnet(usedynamic)} { return }
-			set qnet(Llisting) 0
-		}
-		
-		if {[regexp {^(#\S+)\s+(\S+)$} $t xx x0 x1]} {
-			if {!$qnet(usedynamic)} { return }
-			if {!$qnet(Llisting)} { return }
-			set x0 [string tolower $x0]
-			set lflag($x0) $x1
-		}
-		
-		return
-	}
-	return
 }
 
 proc qnet:msgm {n u h t} {
@@ -427,52 +376,30 @@ proc qnet:msgm {n u h t} {
 	}
 }
 
-proc qnet:hasqflag {c f} {
-	global qflag ; set i 0 ; set c [string tolower $c]
-	if {![info exists qflag($c)]} { return 0 }
-	while {$i < [string length $f]} {
-		if {[string match "*[string index $f $i]*" $qflag($c)]} { return 1 }
-		incr i
-	}
-	return 0
-}
-
-proc qnet:haslflag {c f} {
-	global lflag ; set i 0 ; set c [string tolower $c]
-	if {![info exists lflag($c)]} { return 0 }
-	while {$i < [string length $f]} {
-		if {[string match "*[string index $f $i]*" $lflag($c)]} { return 1 }
-		incr i
-	}
-	return 0
-}
-
-proc qnet:putmsg {c t x} {
+proc qnet:putmsg {c t} {
 	global qnet
-	switch -exact -- $x {
-		1 { putquick "PRIVMSG $qnet(qservice) :$t $c" -next }
-		2 { putquick "PRIVMSG $qnet(lservice) :$t $c" -next }
-	}
+	putquick "PRIVMSG $qnet(qservice) :$t $c" -next
 }
 
-proc qnet:matchattr {chan flags {auth ""}} {
-	global qnet lflag qflag ; set c [string tolower $chan]
-	#returns:
-	# 0 - no flag
-	# 1 - flag on Q
-	# 2 - flag on L
-	if {![info exists lflag($chan] && [info exists qflag($chan)]} {
-		#q channel
-		set i 0 ; while {$i < [string length $flags]} {
-			if {[string matches "*[string index $flags $i]*" $qflag($chan)]} { return 1 }
-		}
-	} elseif {[info exists lflag($chan)] && ![info exists qflag($chan)]} {
-		set i 0 ; while {$i < [string length $flags]} {
-			if {[string matches "*[string index $flags $i]*" $lflag($chan)]} { return 2 }
-		}
-	} {
+# Returns: 0: no flag, 1: has the given flags
+proc qnet:matchattr {chan flags} {
+	global qnet qflag ; set c [string tolower $chan]
+
+	if {![info exists qflag($chan)]} {
 		return 0
-	}  
+	}
+	
+	set i 0
+	
+	while {$i < [string length $flags]} {
+		if {[string match "*[string index $flags $i]*" $qflag($chan)]} {
+			return 1
+		}
+		incr i
+
+	}
+
+	return 0
 }
 
 proc qnet:need {c t} {
@@ -487,121 +414,63 @@ proc qnet:need {c t} {
 		qnet:update; return
 	}
 	
-	set serv 0
-	set isqop [qnet:hasqflag $c "mno"]
-	set isqmaster [qnet:hasqflag $c "mn"]
-	set isqvc [qnet:hasqflag $c "mnv"]
-	set islop [qnet:haslflag $c "mno"]
-	set islmaster [qnet:haslflag $c "mn"]
-	set islvc [qnet:haslflag $c "mnv"]
-	
-	if {$islmaster || $islop || $islvc} { ;#we prefer L .. its nicer to us, it doesnt ban us on sight!
-		set serv 2
-		set isop $islop
-		set isvc $islvc
-		set ismaster $islmaster
-	} elseif {$isqmaster || $isqop || $isqvc} {
-		set serv 1
-		set isop $isqop
-		set isvc $isqvc
-		set ismaster $isqmaster
-	} else {
-		return ;#TODO: fix me sometime later. doesnt work as of now, dont bother understanding it
-		if {$t != "op"} { return }
-		if {!$qnet(useoperserv)} { return }
-		foreach x [chanlist $c] {
-			if {[isop $x $c]} { return }
-		}
-		if {$qnet(netsplit)!=0} {
-			if {[expr [unixtime] - $qnet(netsplit)] > $qnet(splittime)} { return }
-			set qnet(netsplit) 0
-		}
-		putmsg $qnet(oservice) "requestop $c $botnick"
-		return
-	};#end of dont-bother-mode
-	
-	if {$serv == 0} { return }
+	set isop [qnet:matchattr $c "mno"]
+	set isaop [qnet:matchattr $c "a"]
+	set ismaster [qnet:matchattr $c "mn"]
+	set isvc [qnet:matchattr $c "mnv"]
+	set isavc [qnet:matchattr $c "g"]
 	
 	switch -exact -- $t {
 		"op" {
 			if {[channel get $c noserviceop]} { return }
-			if {$isop} { qnet:putmsg $c "op" $serv }
+			if {![botonchan $c]} { return }
+			if {$isop && !$isaop} { qnet:putmsg $c "op" }
 		}
 		"voice" {
 			if {[channel get $c noservicevoice]} { return }
-			if {$isvc} { qnet:putmsg $c "voice" $serv }
+			if {![botonchan $c]} { return }
+			if {$isvc && !$isavc} { qnet:putmsg $c "voice" }
 		}
 		
 		"unban" {
 			if {[channel get $c noserviceprotect]} {
-				if {$serv == 1} { ;#Q
-					if {!$isop} { return } ;#we are banned and cannot remove the ban. eg, q would force us out again
-					qnet:putmsg $c "unbanall" $serv
-				} { ;#L
-					if {$isvc} { qnet:putmsg $c "invite" $serv } ;#we invite ourselves, eggdrop takes care of the rest
+				if {$isop} {
+					qnet::putmsg $c "unbanme"
+				} elseif {$isvc} {
+					qnet::putmsg $c "invite"
 				}
 			} else {
-				if {$serv == 1} {
-					if {!$ismaster || !$isop} { ;#we cant do anything .. see above
-						return
-					}
-					;#lets rock!
-					qnet:putmsg $c "deopall" $serv
-					qnet:putmsg $c "unbanall" $serv
-					qnet:putmsg $c "clearchan" $serv
-				} else {
-					if {$ismaster} {
-						qnet:putmsg $c "recover" $serv
-					} elseif {$isop} {
-						qnet:putmsg $c "deopall" $serv
-						qnet:putmsg $c "unbanall" $serv
-						qnet:putmsg $c "clearchan" $serv
-					} elseif {$isvc} { ;#invite ourselves, if there is nothing else to do
-						qnet:putmsg $c "invite" $serv
-					} ;#else: we cant do anything, sorry sir!
+				if {$ismaster} {
+					qnet:putmsg $c "recover"
+				} elseif {$isop} {
+					qnet::putmsg $c "unbanme"
+				} elseif {$isvc} {
+					qnet::putmsg $c "invite"
 				}
 			}
 		} 
 		
 		"limit" {
 			if {[channel get $c noserviceprotect]} {
-				if {$serv == 1} { ;#Q
-					if {$isvc} { qnet:putmsg $c "invite" $serv }
-				} { ;#L
-					if {$isvc} { qnet:putmsg $c "invite" $serv }
-				}
+				if {$isvc} { qnet:putmsg $c "invite" }
 			} else {
-				if {$serv == 1} {
-					if {!$ismaster || !$isop} { ;#we cant do anything but invite ourselves
-						qnet:pugmsg $c "invite" $serv
-						return
-					}
-					qnet:putmsg $c "deopall" $serv
-					qnet:putmsg $c "unbanall" $serv
-					qnet:putmsg $c "clearchan" $serv
-				} else {
-					if {$ismaster} {
-						qnet:putmsg $c "recover" $serv
-					} elseif {$isop} {
-						qnet:putmsg $c "deopall" $serv
-						qnet:putmsg $c "unbanall" $serv
-						qnet:putmsg $c "clearchan" $serv
-					} elseif {$isvc} { ;#invite ourselves, if there is nothing else to do
-						qnet:putmsg $c "invite" $serv
-					} ;#else: we cant do anything, sorry sir!
+				if {!$ismaster || !$isop} { ;#we cant do anything but invite ourselves
+					qnet:pugmsg $c "invite"
+					return
 				}
+				qnet:putmsg $c "recover"
 			}
 		}
 
 		"invite" {
 			if {$isop || $isvc} {
-				qnet:putmsg $c "invite" $serv
+				qnet:putmsg $c "invite"
 			}
 		}
 
 		"key" {
 			if {$isop || $isvc} {
-				qnet:putmsg $c "invite" $serv
+				qnet:putmsg $c "invite"
 			}
 		}
 		
@@ -609,7 +478,6 @@ proc qnet:need {c t} {
 			putlog "qnet:need called with unknown parameter $t."
 		}
 	}
-	return
 }
 
 
@@ -628,12 +496,6 @@ proc qnet:dcc {h i t} {
 	set arg [join [lrange $lst 1 end]]
 	global qnet lflag qflag
 	switch -exact -- $cmd {
-		"info" {
-			putidx $i "\002.qnet info\002 is deprecated. Use '.qnet status'"
-			putidx $i "  This change ensures 'visual compatibility' with other scripts"
-			putidx $i "  and the default eggdrop functionality."
-			return 0
-		}
 		"status" {
 			if {$qnet(authed)} {
 				putidx $i "Quakenet Auth: v${qnet(version)}"
@@ -643,30 +505,16 @@ proc qnet:dcc {h i t} {
 					putidx $i "  If this problem persists, contact me please. It is most likely a bug."
 					return 1
 				}
-				if {$qnet(Llisting) == 1} {
-					putidx $i " Im currently at the task of updating this list. Try again in a few seconds."
-					return 1
-				}
 				putidx $i " I am authed as $qnet(authname) with userid $qnet(userid)."
 				putidx $i "  The email set is: $qnet(email)."
 				if {$qnet(usedynamic)} { putidx $i " I am using dynamic flag retrieval." } { putidx $i " I am not using dynamic flag retrieval." }
 				putidx $i "  My last auth was [duration [expr [unixtime]-$qnet(lastauth)]] ago."
 				putidx $i "  Channel listing:"
-				putidx $i "   Q"
 				if {[array size qflag]==0} {
 						putidx $i "    - No flags."
 				} {
 					foreach x [array names qflag] {
 						set fstr [format "%-30s %6s" "$x" "$qflag($x)"]
-						putidx $i "    $fstr"
-					}
-				}
-				putidx $i "   L"
-				if {[array size lflag]==0} {
-					putidx $i "    - No flags."
-				} {
-					foreach x [array names lflag] {
-						set fstr [format "%-30s %6s" "$x" "$lflag($x)"]
 						putidx $i "    $fstr"
 					}
 				}
@@ -683,9 +531,9 @@ proc qnet:dcc {h i t} {
 				putidx $i "Dynamic flag retrieval is disabled."
 				return 1
 			}
-			putidx $i "Sending whoami to Q & L."
+			putidx $i "Sending whoami to Q."
 			if {![qnet:update]} {
-				putidx $i "Update failed, i am not authed - authing."
+				putidx $i "Update failed, i am not authed - authing next cycle."
 			}
 			return 1
 		}
