@@ -454,7 +454,7 @@ proc qnet:need {c t} {
 				if {$isvc} { qnet:putmsg $c "invite" }
 			} else {
 				if {!$ismaster || !$isop} { ;#we cant do anything but invite ourselves
-					qnet:pugmsg $c "invite"
+					qnet:putmsg $c "invite"
 					return
 				}
 				qnet:putmsg $c "recover"
